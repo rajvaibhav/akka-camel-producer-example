@@ -21,6 +21,7 @@ import spray.httpx._
 import spray.json._
 import DefaultJsonProtocol._
 import scala.concurrent._
+import akka.camel._
 // we don't implement our route structure directly in the service actor because
 // we want to be able to test it independently, without having to spin up an actor
 class DemoServiceActor extends Actor with DemoService with ActorLogging {
@@ -35,6 +36,8 @@ class DemoServiceActor extends Actor with DemoService with ActorLogging {
   def receive = runRoute(demoRoute)
 
   override def getContext = actorRefFactory
+
+  
 }
 
 
@@ -44,14 +47,15 @@ trait DemoService extends HttpService with SprayJsonSupport with DefaultJsonProt
   implicit def executionContext = actorRefFactory.dispatcher
   implicit val timeout = Timeout(30 seconds)
   def getContext: ActorContext
+  implicit val camelContext: org.apache.camel.CamelContext = CamelExtension.get(getContext.system).context
   val demoRoute = {
     get {
       path("ping") {
         complete{
 		val remoteServer = getContext.actorSelection("/user/remoteRestServer")
 		println(remoteServer)
-		val futureResp = ask(remoteServer, "")
-		futureResp.mapTo[String]
+		val message = ask(remoteServer, new String()).mapTo[CamelMessage]
+                for( x <- message) yield ( x.bodyAs[String])
 	}
       }
     }
